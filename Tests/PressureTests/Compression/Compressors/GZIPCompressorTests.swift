@@ -61,6 +61,69 @@ final class GZIPCompressorTests: XCTestCase {
         XCTAssertEqual(extractedContent, originalContent)
     }
     
+    func testCompressGzip_VerifiedWithCLI() async throws {
+        // Create test file
+        let originalContent = "Test content for GZIP CLI verification"
+        let testFile = try CompressionTestHelpers.createTestFile(in: tempDirectory, name: "test.txt", content: originalContent)
+        let gzURL = tempDirectory.appendingPathComponent("test.gz")
+        
+        // Compress using app's compressor
+        _ = try await compressionManager.compress(
+            files: [testFile],
+            to: gzURL,
+            format: .gzip,
+            progress: { _ in }
+        )
+        
+        // Verify archive was created
+        XCTAssertTrue(FileManager.default.fileExists(atPath: gzURL.path))
+        
+        // Verify using CLI gunzip
+        let extractDir = tempDirectory.appendingPathComponent("cli_extracted")
+        try FileManager.default.createDirectory(at: extractDir, withIntermediateDirectories: true)
+        
+        let verified = try CompressionTestHelpers.verifyGzipWithCLI(
+            archiveURL: gzURL,
+            extractTo: extractDir,
+            expectedFileName: "test.txt"
+        )
+        
+        XCTAssertTrue(verified, "GZIP archive should be extractable with gunzip command")
+        
+        // Verify content matches
+        let extractedFile = extractDir.appendingPathComponent("test.txt")
+        if FileManager.default.fileExists(atPath: extractedFile.path) {
+            let extractedContent = try CompressionTestHelpers.readFileContent(at: extractedFile)
+            XCTAssertEqual(extractedContent, originalContent, "Content should match after CLI extraction")
+        }
+    }
+    
+    func testCompressGzip_MultipleFiles_VerifiedWithCLI() async throws {
+        // GZIP with multiple files creates tar.gz
+        let files = try CompressionTestHelpers.createTestFiles(in: tempDirectory, count: 3)
+        let tarGzURL = tempDirectory.appendingPathComponent("multi.tar.gz")
+        
+        // Compress using app's compressor
+        _ = try await compressionManager.compress(
+            files: files,
+            to: tarGzURL,
+            format: .gzip,
+            progress: { _ in }
+        )
+        
+        // Verify using CLI tar
+        let extractDir = tempDirectory.appendingPathComponent("cli_extracted")
+        try FileManager.default.createDirectory(at: extractDir, withIntermediateDirectories: true)
+        
+        let verified = try CompressionTestHelpers.verifyTarGzWithCLI(
+            archiveURL: tarGzURL,
+            extractTo: extractDir,
+            expectedFiles: ["test1.txt", "test2.txt", "test3.txt"]
+        )
+        
+        XCTAssertTrue(verified, "tar.gz archive should be extractable with tar command")
+    }
+    
     func testCompressGzip_MultipleFiles_CreatesTarGz() async throws {
         // GZIP with multiple files should create a tar.gz
         let files = try CompressionTestHelpers.createTestFiles(in: tempDirectory, count: 3)

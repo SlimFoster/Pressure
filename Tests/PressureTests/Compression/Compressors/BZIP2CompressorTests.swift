@@ -61,6 +61,69 @@ final class BZIP2CompressorTests: XCTestCase {
         XCTAssertEqual(extractedContent, originalContent)
     }
     
+    func testCompressBzip2_VerifiedWithCLI() async throws {
+        // Create test file
+        let originalContent = "Test content for BZIP2 CLI verification"
+        let testFile = try CompressionTestHelpers.createTestFile(in: tempDirectory, name: "test.txt", content: originalContent)
+        let bz2URL = tempDirectory.appendingPathComponent("test.bz2")
+        
+        // Compress using app's compressor
+        _ = try await compressionManager.compress(
+            files: [testFile],
+            to: bz2URL,
+            format: .bzip2,
+            progress: { _ in }
+        )
+        
+        // Verify archive was created
+        XCTAssertTrue(FileManager.default.fileExists(atPath: bz2URL.path))
+        
+        // Verify using CLI bunzip2
+        let extractDir = tempDirectory.appendingPathComponent("cli_extracted")
+        try FileManager.default.createDirectory(at: extractDir, withIntermediateDirectories: true)
+        
+        let verified = try CompressionTestHelpers.verifyBzip2WithCLI(
+            archiveURL: bz2URL,
+            extractTo: extractDir,
+            expectedFileName: "test.txt"
+        )
+        
+        XCTAssertTrue(verified, "BZIP2 archive should be extractable with bunzip2 command")
+        
+        // Verify content matches
+        let extractedFile = extractDir.appendingPathComponent("test.txt")
+        if FileManager.default.fileExists(atPath: extractedFile.path) {
+            let extractedContent = try CompressionTestHelpers.readFileContent(at: extractedFile)
+            XCTAssertEqual(extractedContent, originalContent, "Content should match after CLI extraction")
+        }
+    }
+    
+    func testCompressBzip2_MultipleFiles_VerifiedWithCLI() async throws {
+        // BZIP2 with multiple files creates tar.bz2
+        let files = try CompressionTestHelpers.createTestFiles(in: tempDirectory, count: 3)
+        let tarBz2URL = tempDirectory.appendingPathComponent("multi.tar.bz2")
+        
+        // Compress using app's compressor
+        _ = try await compressionManager.compress(
+            files: files,
+            to: tarBz2URL,
+            format: .bzip2,
+            progress: { _ in }
+        )
+        
+        // Verify using CLI tar
+        let extractDir = tempDirectory.appendingPathComponent("cli_extracted")
+        try FileManager.default.createDirectory(at: extractDir, withIntermediateDirectories: true)
+        
+        let verified = try CompressionTestHelpers.verifyTarBz2WithCLI(
+            archiveURL: tarBz2URL,
+            extractTo: extractDir,
+            expectedFiles: ["test1.txt", "test2.txt", "test3.txt"]
+        )
+        
+        XCTAssertTrue(verified, "tar.bz2 archive should be extractable with tar command")
+    }
+    
     func testCompressBzip2_MultipleFiles_CreatesTarBz2() async throws {
         // BZIP2 with multiple files should create a tar.bz2
         let files = try CompressionTestHelpers.createTestFiles(in: tempDirectory, count: 3)

@@ -79,4 +79,251 @@ class CompressionTestHelpers {
         let corruptedData = Data([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46])
         try corruptedData.write(to: url)
     }
+    
+    // MARK: - CLI Verification Helpers
+    
+    static func checkCLIToolAvailable(_ tool: String) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        process.arguments = [tool]
+        
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
+        } catch {
+            return false
+        }
+    }
+    
+    static func runCLICommand(_ command: String, arguments: [String], workingDirectory: URL? = nil) throws -> (output: String, exitCode: Int32) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: command)
+        process.arguments = arguments
+        
+        if let workingDirectory = workingDirectory {
+            process.currentDirectoryURL = workingDirectory
+        }
+        
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+        
+        try process.run()
+        process.waitUntilExit()
+        
+        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        let output = String(data: outputData, encoding: .utf8) ?? ""
+        
+        return (output: output, exitCode: process.terminationStatus)
+    }
+    
+    static func verifyZipWithCLI(archiveURL: URL, extractTo: URL, expectedFiles: [String]) throws -> Bool {
+        guard checkCLIToolAvailable("unzip") else {
+            throw XCTSkip("unzip command not available")
+        }
+        
+        // Extract using unzip
+        let (_, exitCode) = try runCLICommand(
+            "/usr/bin/unzip",
+            arguments: ["-q", "-o", archiveURL.path, "-d", extractTo.path],
+            workingDirectory: nil
+        )
+        
+        guard exitCode == 0 else {
+            return false
+        }
+        
+        // Verify expected files exist
+        for fileName in expectedFiles {
+            let fileURL = extractTo.appendingPathComponent(fileName)
+            if !FileManager.default.fileExists(atPath: fileURL.path) {
+                // Try without path component (unzip may extract to root)
+                let justName = (fileName as NSString).lastPathComponent
+                let altURL = extractTo.appendingPathComponent(justName)
+                if !FileManager.default.fileExists(atPath: altURL.path) {
+                    return false
+                }
+            }
+        }
+        
+        return true
+    }
+    
+    static func verifyGzipWithCLI(archiveURL: URL, extractTo: URL, expectedFileName: String) throws -> Bool {
+        guard checkCLIToolAvailable("gunzip") else {
+            throw XCTSkip("gunzip command not available")
+        }
+        
+        // Copy archive to extract directory for decompression
+        let tempArchive = extractTo.appendingPathComponent(archiveURL.lastPathComponent)
+        try FileManager.default.copyItem(at: archiveURL, to: tempArchive)
+        
+        // Decompress using gunzip
+        let (_, exitCode) = try runCLICommand(
+            "/usr/bin/gunzip",
+            arguments: ["-f", tempArchive.path],
+            workingDirectory: nil
+        )
+        
+        guard exitCode == 0 else {
+            return false
+        }
+        
+        // Verify decompressed file exists
+        let decompressedName = archiveURL.deletingPathExtension().lastPathComponent
+        let decompressedURL = extractTo.appendingPathComponent(decompressedName)
+        return FileManager.default.fileExists(atPath: decompressedURL.path)
+    }
+    
+    static func verifyTarWithCLI(archiveURL: URL, extractTo: URL, expectedFiles: [String]) throws -> Bool {
+        guard checkCLIToolAvailable("tar") else {
+            throw XCTSkip("tar command not available")
+        }
+        
+        // Extract using tar
+        let (_, exitCode) = try runCLICommand(
+            "/usr/bin/tar",
+            arguments: ["-xf", archiveURL.path, "-C", extractTo.path],
+            workingDirectory: nil
+        )
+        
+        guard exitCode == 0 else {
+            return false
+        }
+        
+        // Verify expected files exist
+        for fileName in expectedFiles {
+            let fileURL = extractTo.appendingPathComponent(fileName)
+            if !FileManager.default.fileExists(atPath: fileURL.path) {
+                // Try without path component
+                let justName = (fileName as NSString).lastPathComponent
+                let altURL = extractTo.appendingPathComponent(justName)
+                if !FileManager.default.fileExists(atPath: altURL.path) {
+                    return false
+                }
+            }
+        }
+        
+        return true
+    }
+    
+    static func verifyBzip2WithCLI(archiveURL: URL, extractTo: URL, expectedFileName: String) throws -> Bool {
+        guard checkCLIToolAvailable("bunzip2") else {
+            throw XCTSkip("bunzip2 command not available")
+        }
+        
+        // Copy archive to extract directory for decompression
+        let tempArchive = extractTo.appendingPathComponent(archiveURL.lastPathComponent)
+        try FileManager.default.copyItem(at: archiveURL, to: tempArchive)
+        
+        // Decompress using bunzip2
+        let (_, exitCode) = try runCLICommand(
+            "/usr/bin/bunzip2",
+            arguments: ["-f", tempArchive.path],
+            workingDirectory: nil
+        )
+        
+        guard exitCode == 0 else {
+            return false
+        }
+        
+        // Verify decompressed file exists
+        let decompressedName = archiveURL.deletingPathExtension().lastPathComponent
+        let decompressedURL = extractTo.appendingPathComponent(decompressedName)
+        return FileManager.default.fileExists(atPath: decompressedURL.path)
+    }
+    
+    static func verifyTarGzWithCLI(archiveURL: URL, extractTo: URL, expectedFiles: [String]) throws -> Bool {
+        guard checkCLIToolAvailable("tar") else {
+            throw XCTSkip("tar command not available")
+        }
+        
+        // Extract using tar (handles .tar.gz automatically)
+        let (_, exitCode) = try runCLICommand(
+            "/usr/bin/tar",
+            arguments: ["-xzf", archiveURL.path, "-C", extractTo.path],
+            workingDirectory: nil
+        )
+        
+        guard exitCode == 0 else {
+            return false
+        }
+        
+        // Verify expected files exist
+        for fileName in expectedFiles {
+            let fileURL = extractTo.appendingPathComponent(fileName)
+            if !FileManager.default.fileExists(atPath: fileURL.path) {
+                let justName = (fileName as NSString).lastPathComponent
+                let altURL = extractTo.appendingPathComponent(justName)
+                if !FileManager.default.fileExists(atPath: altURL.path) {
+                    return false
+                }
+            }
+        }
+        
+        return true
+    }
+    
+    static func verifyTarBz2WithCLI(archiveURL: URL, extractTo: URL, expectedFiles: [String]) throws -> Bool {
+        guard checkCLIToolAvailable("tar") else {
+            throw XCTSkip("tar command not available")
+        }
+        
+        // Extract using tar (handles .tar.bz2 automatically)
+        let (_, exitCode) = try runCLICommand(
+            "/usr/bin/tar",
+            arguments: ["-xjf", archiveURL.path, "-C", extractTo.path],
+            workingDirectory: nil
+        )
+        
+        guard exitCode == 0 else {
+            return false
+        }
+        
+        // Verify expected files exist
+        for fileName in expectedFiles {
+            let fileURL = extractTo.appendingPathComponent(fileName)
+            if !FileManager.default.fileExists(atPath: fileURL.path) {
+                let justName = (fileName as NSString).lastPathComponent
+                let altURL = extractTo.appendingPathComponent(justName)
+                if !FileManager.default.fileExists(atPath: altURL.path) {
+                    return false
+                }
+            }
+        }
+        
+        return true
+    }
+    
+    static func verifyZWithCLI(archiveURL: URL, extractTo: URL, expectedFileName: String) throws -> Bool {
+        guard checkCLIToolAvailable("uncompress") else {
+            throw XCTSkip("uncompress command not available")
+        }
+        
+        // Copy archive to extract directory for decompression
+        let tempArchive = extractTo.appendingPathComponent(archiveURL.lastPathComponent)
+        try FileManager.default.copyItem(at: archiveURL, to: tempArchive)
+        
+        // Decompress using uncompress
+        let (_, exitCode) = try runCLICommand(
+            "/usr/bin/uncompress",
+            arguments: ["-f", tempArchive.path],
+            workingDirectory: nil
+        )
+        
+        guard exitCode == 0 else {
+            return false
+        }
+        
+        // Verify decompressed file exists
+        let decompressedName = archiveURL.deletingPathExtension().lastPathComponent
+        let decompressedURL = extractTo.appendingPathComponent(decompressedName)
+        return FileManager.default.fileExists(atPath: decompressedURL.path)
+    }
 }

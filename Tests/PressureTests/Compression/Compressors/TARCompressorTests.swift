@@ -61,6 +61,69 @@ final class TARCompressorTests: XCTestCase {
         XCTAssertEqual(extractedContent, originalContent)
     }
     
+    func testCompressTar_VerifiedWithCLI() async throws {
+        // Create test file
+        let originalContent = "Test content for TAR CLI verification"
+        let testFile = try CompressionTestHelpers.createTestFile(in: tempDirectory, name: "test.txt", content: originalContent)
+        let tarURL = tempDirectory.appendingPathComponent("test.tar")
+        
+        // Compress using app's compressor
+        _ = try await compressionManager.compress(
+            files: [testFile],
+            to: tarURL,
+            format: .tar,
+            progress: { _ in }
+        )
+        
+        // Verify archive was created
+        XCTAssertTrue(FileManager.default.fileExists(atPath: tarURL.path))
+        
+        // Verify using CLI tar
+        let extractDir = tempDirectory.appendingPathComponent("cli_extracted")
+        try FileManager.default.createDirectory(at: extractDir, withIntermediateDirectories: true)
+        
+        let verified = try CompressionTestHelpers.verifyTarWithCLI(
+            archiveURL: tarURL,
+            extractTo: extractDir,
+            expectedFiles: ["test.txt"]
+        )
+        
+        XCTAssertTrue(verified, "TAR archive should be extractable with tar command")
+        
+        // Verify content matches
+        let extractedFile = extractDir.appendingPathComponent("test.txt")
+        if FileManager.default.fileExists(atPath: extractedFile.path) {
+            let extractedContent = try CompressionTestHelpers.readFileContent(at: extractedFile)
+            XCTAssertEqual(extractedContent, originalContent, "Content should match after CLI extraction")
+        }
+    }
+    
+    func testCompressTar_MultipleFiles_VerifiedWithCLI() async throws {
+        // Create multiple test files
+        let files = try CompressionTestHelpers.createTestFiles(in: tempDirectory, count: 3)
+        let tarURL = tempDirectory.appendingPathComponent("multi.tar")
+        
+        // Compress using app's compressor
+        _ = try await compressionManager.compress(
+            files: files,
+            to: tarURL,
+            format: .tar,
+            progress: { _ in }
+        )
+        
+        // Verify using CLI tar
+        let extractDir = tempDirectory.appendingPathComponent("cli_extracted")
+        try FileManager.default.createDirectory(at: extractDir, withIntermediateDirectories: true)
+        
+        let verified = try CompressionTestHelpers.verifyTarWithCLI(
+            archiveURL: tarURL,
+            extractTo: extractDir,
+            expectedFiles: ["test1.txt", "test2.txt", "test3.txt"]
+        )
+        
+        XCTAssertTrue(verified, "TAR archive with multiple files should be extractable with tar command")
+    }
+    
     func testCompressDecompressTar_RoundTrip() async throws {
         let originalContent = "TAR round-trip test content"
         let testFile = try CompressionTestHelpers.createTestFile(in: tempDirectory, name: "test.txt", content: originalContent)

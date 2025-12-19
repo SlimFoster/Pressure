@@ -81,6 +81,69 @@ final class ZIPCompressorTests: XCTestCase {
         XCTAssertEqual(extractedContent, originalContent)
     }
     
+    func testCompressZip_VerifiedWithCLI() async throws {
+        // Create test file
+        let originalContent = "Test content for CLI verification"
+        let testFile = try CompressionTestHelpers.createTestFile(in: tempDirectory, name: "test.txt", content: originalContent)
+        let zipURL = tempDirectory.appendingPathComponent("test.zip")
+        
+        // Compress using app's compressor
+        _ = try await compressionManager.compress(
+            files: [testFile],
+            to: zipURL,
+            format: .zip,
+            progress: { _ in }
+        )
+        
+        // Verify archive was created
+        XCTAssertTrue(FileManager.default.fileExists(atPath: zipURL.path))
+        
+        // Verify using CLI unzip
+        let extractDir = tempDirectory.appendingPathComponent("cli_extracted")
+        try FileManager.default.createDirectory(at: extractDir, withIntermediateDirectories: true)
+        
+        let verified = try CompressionTestHelpers.verifyZipWithCLI(
+            archiveURL: zipURL,
+            extractTo: extractDir,
+            expectedFiles: ["test.txt"]
+        )
+        
+        XCTAssertTrue(verified, "ZIP archive should be extractable with unzip command")
+        
+        // Verify content matches
+        let extractedFile = extractDir.appendingPathComponent("test.txt")
+        if FileManager.default.fileExists(atPath: extractedFile.path) {
+            let extractedContent = try CompressionTestHelpers.readFileContent(at: extractedFile)
+            XCTAssertEqual(extractedContent, originalContent, "Content should match after CLI extraction")
+        }
+    }
+    
+    func testCompressZip_MultipleFiles_VerifiedWithCLI() async throws {
+        // Create multiple test files
+        let files = try CompressionTestHelpers.createTestFiles(in: tempDirectory, count: 3)
+        let zipURL = tempDirectory.appendingPathComponent("multi.zip")
+        
+        // Compress using app's compressor
+        _ = try await compressionManager.compress(
+            files: files,
+            to: zipURL,
+            format: .zip,
+            progress: { _ in }
+        )
+        
+        // Verify using CLI unzip
+        let extractDir = tempDirectory.appendingPathComponent("cli_extracted")
+        try FileManager.default.createDirectory(at: extractDir, withIntermediateDirectories: true)
+        
+        let verified = try CompressionTestHelpers.verifyZipWithCLI(
+            archiveURL: zipURL,
+            extractTo: extractDir,
+            expectedFiles: ["test1.txt", "test2.txt", "test3.txt"]
+        )
+        
+        XCTAssertTrue(verified, "ZIP archive with multiple files should be extractable with unzip command")
+    }
+    
     func testCompressDecompressZip_RoundTrip() async throws {
         let originalContent = "Round-trip test content\nWith multiple lines\nAnd special chars: àáâ"
         let testFile = try CompressionTestHelpers.createTestFile(in: tempDirectory, name: "roundtrip.txt", content: originalContent)
