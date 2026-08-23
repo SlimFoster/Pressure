@@ -45,12 +45,6 @@ If you prefer not to use Tuist, you can create a manual Xcode project, but you'l
 ### Issue: "Value of type 'UTType' has no member 'identifier'"
 **Solution:** This might occur in older Swift versions. Replace `.identifier` with `.rawValue` or update to Swift 5.9+.
 
-### Issue: Compression commands not found
-**Solution:** The app uses system commands (`zip`, `gzip`, `tar`, etc.) which should be available on macOS by default. If they're missing, install Xcode Command Line Tools:
-```bash
-xcode-select --install
-```
-
 ### Issue: Build errors related to file types
 **Solution:** Make sure all Swift files are added to the Xcode target. Check the "Target Membership" in the File Inspector (right panel) for each file.
 
@@ -61,13 +55,12 @@ Pressure/
 ├── Project.swift               # Tuist project configuration
 ├── Workspace.swift              # Tuist workspace configuration
 ├── Sources/
-│   └── Pressure/               # Main app source files
-│       ├── PressureApp.swift  # App entry point
-│       ├── ContentView.swift  # SwiftUI user interface
-│       ├── CompressionManager.swift  # Compression logic
-│       └── FileDialogHelper.swift    # File dialog helpers
+│   └── Pressure/
+│       ├── Compression/        # CompressionManager, format enum/errors, per-format compressors
+│       └── Views/               # PressureApp, ContentView, navigators, SaveDialog, FileDialogHelper
 ├── Resources/
-│   └── Info.plist              # App metadata
+│   ├── Info.plist              # App metadata
+│   └── Pressure.entitlements   # Release code-signing entitlements
 ├── Tests/                       # Test targets
 │   ├── PressureTests/          # Unit tests
 │   └── PressureUITests/        # UI tests
@@ -85,7 +78,6 @@ Pressure/
 ## Next Steps
 
 - Customize the app icon and bundle identifier
-- Add compression level options
 - Implement password protection for ZIP files
 - Add support for RAR compression (requires libunrar)
 - Add 7z format support

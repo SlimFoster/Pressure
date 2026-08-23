@@ -43,7 +43,7 @@ let project = Project(
                 .glob("Sources/Pressure/**/*.swift"),
             ],
             resources: [
-                .glob(pattern: "Resources/**", excluding: ["Resources/Info.plist"]),
+                .glob(pattern: "Resources/**", excluding: ["Resources/Info.plist", "Resources/Pressure.entitlements"]),
             ],
             dependencies: [
                 .package(product: "SWCompression", type: .runtime),
@@ -52,11 +52,21 @@ let project = Project(
             settings: .settings(
                 base: [
                     "INFOPLIST_FILE": "Resources/Info.plist",
-                    "DEVELOPMENT_TEAM": "",
-                    "CODE_SIGN_IDENTITY": "-",
-                    "CODE_SIGNING_REQUIRED": "YES",
-                    "CODE_SIGNING_ALLOWED": "YES",
-                    "AD_HOC_CODE_SIGNING_ALLOWED": "YES",
+                ],
+                configurations: [
+                    .debug(name: "Debug", settings: [
+                        "CODE_SIGNING_REQUIRED": "NO",
+                        "CODE_SIGNING_ALLOWED": "NO",
+                        "ENABLE_HARDENED_RUNTIME": "NO",
+                    ]),
+                    .release(name: "Release", settings: [
+                        "CODE_SIGN_ENTITLEMENTS": "Resources/Pressure.entitlements",
+                        "DEVELOPMENT_TEAM": "",
+                        "CODE_SIGN_IDENTITY": "-",
+                        "CODE_SIGNING_REQUIRED": "YES",
+                        "CODE_SIGNING_ALLOWED": "YES",
+                        "AD_HOC_CODE_SIGNING_ALLOWED": "YES",
+                    ]),
                 ]
             )
         ),

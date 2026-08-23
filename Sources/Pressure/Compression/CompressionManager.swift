@@ -9,6 +9,22 @@ class CompressionManager: ObservableObject {
         format: CompressionFormat,
         progress: @escaping (Double) async -> Void
     ) async throws -> URL {
+        return try await compress(
+            files: files,
+            to: outputURL,
+            format: format,
+            compressionLevel: nil,
+            progress: progress
+        )
+    }
+    
+    func compress(
+        files: [URL],
+        to outputURL: URL,
+        format: CompressionFormat,
+        compressionLevel: Int?,
+        progress: @escaping (Double) async -> Void
+    ) async throws -> URL {
         guard !files.isEmpty else {
             throw CompressionError.invalidInput("No files to compress")
         }
@@ -17,7 +33,7 @@ class CompressionManager: ObservableObject {
         
         switch format {
         case .zip:
-            return try await ZIPCompressor.compress(files: files, outputURL: outputURL, progress: progress)
+            return try await ZIPCompressor.compress(files: files, outputURL: outputURL, compressionLevel: compressionLevel, progress: progress)
         case .gzip:
             return try await GZIPCompressor.compress(files: files, outputURL: outputURL, progress: progress)
         case .tar:

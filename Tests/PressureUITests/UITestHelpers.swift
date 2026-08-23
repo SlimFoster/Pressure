@@ -30,6 +30,22 @@ class UITestHelpers {
         try content.write(to: fileURL, atomically: true, encoding: .utf8)
         return fileURL
     }
+    
+    static func performDragAndDrop(from sourceElement: XCUIElement, to destinationElement: XCUIElement, duration: TimeInterval = 0.5) {
+        let sourceCoordinate = sourceElement.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let destinationCoordinate = destinationElement.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        sourceCoordinate.press(forDuration: duration, thenDragTo: destinationCoordinate)
+    }
+    
+    static func findTableInScrollView(_ app: XCUIApplication, index: Int = 0) -> XCUIElement? {
+        let tables = app.tables
+        guard tables.count > index else { return nil }
+        return tables.element(boundBy: index)
+    }
+    
+    static func waitForTableToLoad(_ table: XCUIElement, timeout: TimeInterval = 5.0) -> Bool {
+        return table.waitForExistence(timeout: timeout)
+    }
 }
 
 

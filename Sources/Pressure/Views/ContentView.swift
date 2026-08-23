@@ -1,221 +1,185 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @StateObject private var compressionManager = CompressionManager()
+    @StateObject private var archiveModel: ArchiveModel
     @State private var selectedFiles: [URL] = []
+    @State private var selectedArchiveItems: Set<String> = []
+    @State private var leftPaneCollapsed = false
+    @State private var showSaveDialog = false
     @State private var selectedFormat: CompressionFormat = .zip
+    @State private var compressionLevel: Int = 6
     @State private var isCompressing = false
     @State private var compressionProgress: Double = 0.0
-    @State private var showFilePicker = false
     @State private var statusMessage = ""
+    @State private var draggedFiles: [URL] = []
+    
+    init() {
+        let manager = CompressionManager()
+        _compressionManager = StateObject(wrappedValue: manager)
+        _archiveModel = StateObject(wrappedValue: ArchiveModel(compressionManager: manager))
+    }
     
     var body: some View {
-        VStack(spacing: 20) {
-            // Header
-            Text("Pressure")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .padding(.top)
-            
-            // File selection area
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Selected Files:")
-                    .font(.headline)
-                
-                if selectedFiles.isEmpty {
-                    Text("No files selected")
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, minHeight: 100)
-                        .background(Color.gray.opacity(0.1))
-                        .cornerRadius(8)
-                } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 5) {
-                            ForEach(selectedFiles, id: \.self) { file in
-                                HStack {
-                                    Image(systemName: "doc")
-                                    Text(file.lastPathComponent)
-                                        .lineLimit(1)
-                                    Spacer()
-                                    Button(action: {
-                                        selectedFiles.removeAll { $0 == file }
-                                    }) {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundColor(.red)
-                                    }
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.blue.opacity(0.1))
-                                .cornerRadius(4)
+        HSplitView {
+            // Left pane - File System Navigator
+            if !leftPaneCollapsed {
+                FileSystemNavigator(selectedFiles: $selectedFiles)
+                    .frame(minWidth: 200, idealWidth: 300)
+                    .toolbar {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button(action: { leftPaneCollapsed.toggle() }) {
+                                Image(systemName: "sidebar.left")
                             }
                         }
-                        .padding()
                     }
-                    .frame(maxHeight: 200)
-                }
-                
-                Button(action: {
-                    showFilePicker = true
-                }) {
-                    Label("Select Files", systemImage: "folder")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
             }
-            .padding()
-            .background(Color.gray.opacity(0.05))
-            .cornerRadius(12)
             
-            // Format selection
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Compression Format:")
-                    .font(.headline)
+            // Right pane - Archive Navigator
+            VStack(spacing: 0) {
+                ArchiveNavigator(
+                    archiveModel: archiveModel,
+                    selectedArchiveItems: $selectedArchiveItems
+                )
                 
-                Picker("Format", selection: $selectedFormat) {
-                    ForEach(CompressionFormat.allCases, id: \.self) { format in
-                        Text(format.rawValue.uppercased())
-                            .tag(format)
+                // Bottom toolbar
+                HStack {
+                    if !leftPaneCollapsed {
+                        Button(action: { leftPaneCollapsed.toggle() }) {
+                            Image(systemName: "sidebar.left")
+                        }
+                    } else {
+                        Button(action: { leftPaneCollapsed.toggle() }) {
+                            Image(systemName: "sidebar.right")
+                        }
                     }
-                }
-                .pickerStyle(.segmented)
-            }
-            .padding()
-            .background(Color.gray.opacity(0.05))
-            .cornerRadius(12)
-            
-            // Progress indicator
-            if isCompressing {
-                VStack(spacing: 10) {
-                    ProgressView(value: compressionProgress, total: 1.0)
-                    Text("Compressing... \(Int(compressionProgress * 100))%")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    
+                    Button("Open Archive") {
+                        openArchive()
+                    }
+                    .disabled(isCompressing)
+                    
+                    Spacer()
+                    
+                    Button("Add Files") {
+                        addFilesToArchive()
+                    }
+                    .disabled(isCompressing)
+                    
+                    Button("Save") {
+                        if archiveModel.archiveURL != nil {
+                            saveArchive()
+                        } else {
+                            showSaveDialog = true
+                        }
+                    }
+                    .disabled(isCompressing || archiveModel.items.isEmpty)
+                    
+                    Button("Save As...") {
+                        showSaveDialog = true
+                    }
+                    .disabled(isCompressing)
+                    
+                    if isCompressing {
+                        ProgressView(value: compressionProgress, total: 1.0)
+                            .frame(width: 100)
+                    }
                 }
                 .padding()
             }
-            
-            // Status message
-            if !statusMessage.isEmpty {
-                Text(statusMessage)
-                    .foregroundColor(statusMessage.contains("Error") ? .red : .green)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(statusMessage.contains("Error") ? Color.red.opacity(0.1) : Color.green.opacity(0.1))
-                    .cornerRadius(8)
-            }
-            
-            // Action buttons
-            HStack(spacing: 20) {
-                Button(action: compressFiles) {
-                    Label("Compress", systemImage: "arrow.down.circle.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(selectedFiles.isEmpty || isCompressing)
-                
-                Button(action: decompressFile) {
-                    Label("Decompress", systemImage: "arrow.up.circle.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .disabled(isCompressing)
-            }
-            .padding()
         }
-        .padding()
-        .frame(minWidth: 600, minHeight: 500)
-        .fileImporter(
-            isPresented: $showFilePicker,
-            allowedContentTypes: [.item],
-            allowsMultipleSelection: true
-        ) { result in
-            switch result {
-            case .success(let urls):
-                selectedFiles.append(contentsOf: urls)
-            case .failure(let error):
-                statusMessage = "Error selecting files: \(error.localizedDescription)"
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            return handleDropSync(providers: providers)
+        }
+        .sheet(isPresented: $showSaveDialog) {
+            SaveDialog(
+                isPresented: $showSaveDialog,
+                selectedFormat: $selectedFormat,
+                compressionLevel: $compressionLevel
+            ) { url, format, level in
+                Task {
+                    await saveArchiveAs(to: url, format: format, level: level)
+                }
             }
+        }
+        .alert("Status", isPresented: .constant(!statusMessage.isEmpty)) {
+            Button("OK") {
+                statusMessage = ""
+            }
+        } message: {
+            Text(statusMessage)
         }
     }
     
-    private func compressFiles() {
-        guard !selectedFiles.isEmpty else { return }
-        
-        isCompressing = true
-        compressionProgress = 0.0
-        statusMessage = ""
-        
-        Task {
-            do {
-                if let saveURL = await NSSavePanel.showSavePanel(
-                    allowedContentTypes: [selectedFormat.fileType.identifier],
-                    nameFieldStringValue: "archive.\(selectedFormat.rawValue)"
-                ) {
-                    let outputURL = try await compressionManager.compress(
-                        files: selectedFiles,
-                        to: saveURL,
-                        format: selectedFormat,
-                        progress: { progress in
-                            await MainActor.run {
-                                compressionProgress = progress
-                            }
-                        }
-                    )
-                    
-                    await MainActor.run {
-                        isCompressing = false
-                        compressionProgress = 1.0
-                        statusMessage = "Successfully compressed to \(outputURL.lastPathComponent)"
-                        selectedFiles.removeAll()
-                    }
-                } else {
-                    await MainActor.run {
-                        isCompressing = false
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    isCompressing = false
-                    statusMessage = "Error: \(error.localizedDescription)"
-                }
-            }
-        }
-    }
-    
-    private func decompressFile() {
+    private func addFilesToArchive() {
         Task {
             guard let fileURLs = await NSOpenPanel.showOpenPanel(
                 canChooseFiles: true,
                 canChooseDirectories: false,
-                allowsMultipleSelection: false,
-                allowedContentTypes: CompressionFormat.allCases.map { $0.fileType.identifier }
-            ), let fileURL = fileURLs.first else {
+                allowsMultipleSelection: true,
+                allowedContentTypes: [UTType.item.identifier]
+            ) else {
                 return
             }
             
             await MainActor.run {
-                isCompressing = true
-                compressionProgress = 0.0
-                statusMessage = ""
-            }
-            
-            do {
-                guard let outputDirs = await NSOpenPanel.showOpenPanel(
-                    canChooseFiles: false,
-                    canChooseDirectories: true,
-                    allowsMultipleSelection: false
-                ), let outputDir = outputDirs.first else {
-                    await MainActor.run {
-                        isCompressing = false
-                    }
-                    return
+                for url in fileURLs {
+                    archiveModel.addFileToArchive(url, at: archiveModel.currentPath)
                 }
-                
-                let extractedFiles = try await compressionManager.decompress(
-                    file: fileURL,
-                    to: outputDir,
+            }
+        }
+    }
+    
+    private func handleDropSync(providers: [NSItemProvider]) -> Bool {
+        var hasValidFiles = false
+        
+        for provider in providers {
+            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                hasValidFiles = true
+                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, error in
+                    guard let data = data as? Data,
+                          let url = URL(dataRepresentation: data, relativeTo: nil) else {
+                        return
+                    }
+                    
+                    Task { @MainActor in
+                        archiveModel.addFileToArchive(url, at: archiveModel.currentPath)
+                    }
+                }
+            }
+        }
+        
+        return hasValidFiles
+    }
+    
+    private func saveArchive() {
+        guard let archiveURL = archiveModel.archiveURL else {
+            showSaveDialog = true
+            return
+        }
+        
+        Task {
+            await saveArchiveAs(to: archiveURL, format: selectedFormat, level: compressionLevel)
+        }
+    }
+    
+    private func saveArchiveAs(to url: URL, format: CompressionFormat, level: Int) async {
+        isCompressing = true
+        compressionProgress = 0.0
+        statusMessage = ""
+        
+        do {
+            // Get files from archive model
+            let filesToCompress = archiveModel.getFilesForCompression()
+            
+            if !filesToCompress.isEmpty {
+                let outputURL = try await compressionManager.compress(
+                    files: filesToCompress,
+                    to: url,
+                    format: format,
+                    compressionLevel: format == .zip ? level : nil,
                     progress: { progress in
                         await MainActor.run {
                             compressionProgress = progress
@@ -226,12 +190,42 @@ struct ContentView: View {
                 await MainActor.run {
                     isCompressing = false
                     compressionProgress = 1.0
-                    statusMessage = "Successfully extracted \(extractedFiles.count) file(s)"
+                    statusMessage = "Successfully saved to \(outputURL.lastPathComponent)"
+                    archiveModel.archiveURL = outputURL
+                }
+            } else {
+                await MainActor.run {
+                    isCompressing = false
+                    statusMessage = "No files to compress"
+                }
+            }
+        } catch {
+            await MainActor.run {
+                isCompressing = false
+                statusMessage = "Error: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    private func openArchive() {
+        Task {
+            guard let fileURLs = await NSOpenPanel.showOpenPanel(
+                canChooseFiles: true,
+                canChooseDirectories: false,
+                allowsMultipleSelection: false,
+                allowedContentTypes: CompressionFormat.allCases.filter { $0 != .rar }.map { $0.fileType.identifier }
+            ), let fileURL = fileURLs.first else {
+                return
+            }
+            
+            do {
+                try await archiveModel.loadArchive(from: fileURL)
+                await MainActor.run {
+                    statusMessage = "Archive opened: \(fileURL.lastPathComponent)"
                 }
             } catch {
                 await MainActor.run {
-                    isCompressing = false
-                    statusMessage = "Error: \(error.localizedDescription)"
+                    statusMessage = "Error opening archive: \(error.localizedDescription)"
                 }
             }
         }

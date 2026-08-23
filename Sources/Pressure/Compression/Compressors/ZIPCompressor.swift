@@ -6,6 +6,7 @@ struct ZIPCompressor {
     static func compress(
         files: [URL],
         outputURL: URL,
+        compressionLevel: Int? = nil,
         progress: @escaping (Double) async -> Void
     ) async throws -> URL {
         return try await withCheckedThrowingContinuation { continuation in
@@ -25,6 +26,8 @@ struct ZIPCompressor {
                             let archive = try Archive(url: url, accessMode: .create)
                             
                             for (index, fileURL) in files.enumerated() {
+                                // Use lastPathComponent as entry name
+                                // In the future, this could be customized via a path mapping parameter
                                 try archive.addEntry(
                                     with: fileURL.lastPathComponent,
                                     fileURL: fileURL,

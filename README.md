@@ -8,17 +8,17 @@ A modern macOS application for compressing and decompressing files in multiple f
 - **GZIP** - GNU zip compression
 - **TAR** - Tape archive format
 - **BZIP2** - Block-sorting file compressor
-- **Z** - Unix compress format
-- **RAR** - RAR archive format (decompression only, requires external library)
+- **Z** - Unix compress format (uses LZ4 via Apple's Compression framework, not classic LZW)
+- **RAR** - RAR archive format (not yet implemented — throws `unsupportedFormat`; would require an external library such as libunrar)
 
 ## Features
 
-- Modern SwiftUI interface
+- Modern SwiftUI interface with a Finder-style two-pane layout
 - Support for multiple compression formats
 - Batch file compression
 - Progress tracking
 - Drag and drop file selection
-- Decompression support for all formats
+- Decompression support for all implemented formats
 
 ## Requirements
 
@@ -31,8 +31,8 @@ A modern macOS application for compressing and decompressing files in multiple f
 
 The project uses the following Swift libraries (managed via Tuist):
 
-- **ZIPFoundation** - ZIP archive support
-- **SWCompression** - GZIP, TAR (reading), and BZIP2 support
+- **ZIPFoundation** - ZIP archive creation and extraction
+- **SWCompression** - GZIP, TAR (reading only), and BZIP2 compression/decompression
 
 Dependencies are automatically resolved when you run `tuist generate`.
 
@@ -71,42 +71,56 @@ The project uses [Tuist](https://tuist.io) for project generation:
 ## Usage
 
 1. Launch the app
-2. Click "Select Files" to choose files to compress
-3. Select your desired compression format
-4. Click "Compress" and choose a save location
-5. For decompression, click "Decompress" and select an archive file
+2. Browse files in the left pane and drag them into the archive pane on the right
+3. Click Save (or Save As) to open the Save dialog, choose a format and compression level, and write the archive
+4. To decompress, open an existing archive and browse or extract its contents
 
 ## Project Structure
 
 ```
 Pressure/
-├── Project.swift              # Tuist project configuration
-├── Workspace.swift             # Tuist workspace configuration
+├── Project.swift               # Tuist project configuration
+├── Workspace.swift              # Tuist workspace configuration
 ├── Sources/
-│   └── Pressure/              # Main app source files
-│       ├── PressureApp.swift  # App entry point
-│       ├── ContentView.swift  # SwiftUI user interface
-│       ├── CompressionManager.swift  # Compression logic
-│       └── FileDialogHelper.swift    # File dialog helpers
+│   └── Pressure/
+│       ├── Compression/
+│       │   ├── CompressionManager.swift    # Coordinator: delegates to format-specific compressors
+│       │   ├── CompressionFormat.swift     # Format enum
+│       │   ├── CompressionError.swift      # Error types
+│       │   └── Compressors/
+│       │       ├── ZIPCompressor.swift
+│       │       ├── GZIPCompressor.swift
+│       │       ├── TARCompressor.swift
+│       │       ├── BZIP2Compressor.swift
+│       │       └── ZCompressor.swift
+│       └── Views/
+│           ├── PressureApp.swift                 # App entry point (@main)
+│           ├── ContentView.swift                 # Two-pane layout
+│           ├── FileSystemNavigator.swift          # Left pane: file system browser
+│           ├── FinderStyleNavigator.swift        # Finder-style file system implementation
+│           ├── ArchiveNavigator.swift             # Right pane: archive browser (+ ArchiveModel)
+│           ├── FinderStyleArchiveNavigator.swift # Finder-style archive implementation
+│           ├── SaveDialog.swift                   # Format + compression level selection
+│           └── FileDialogHelper.swift             # Async wrappers for NSSavePanel/NSOpenPanel
 ├── Resources/
-│   └── Info.plist            # App metadata
-└── Tests/                     # Test targets
-    ├── PressureTests/        # Unit tests
-    └── PressureUITests/      # UI tests
+│   ├── Info.plist              # App metadata
+│   └── Pressure.entitlements   # Release code-signing entitlements
+└── Tests/
+    ├── PressureTests/          # Unit tests (mirrors Sources/Pressure/Compression)
+    └── PressureUITests/        # UI tests
 ```
 
 ## Architecture
 
 - **PressureApp.swift** - Main app entry point
-- **ContentView.swift** - SwiftUI user interface
-- **CompressionManager.swift** - Handles all compression/decompression operations
-- **FileDialogHelper.swift** - Async file dialog helpers
+- **ContentView.swift** - Two-pane SwiftUI layout (file system pane + archive pane)
+- **CompressionManager** - `@MainActor` coordinator that delegates to a per-format compressor struct in `Compression/Compressors/`
+- **FileDialogHelper.swift** - Async wrappers around AppKit's completion-handler-based `NSSavePanel`/`NSOpenPanel`
 
 ## Future Enhancements
 
-- RAR compression support (requires libunrar)
+- RAR compression/decompression support (requires libunrar)
 - 7z format support
-- Compression level selection
 - Password protection for ZIP files
 - Archive preview
 - Batch operations
