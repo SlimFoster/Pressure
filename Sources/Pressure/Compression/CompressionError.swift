@@ -5,7 +5,9 @@ enum CompressionError: LocalizedError {
     case compressionFailed(String)
     case decompressionFailed(String)
     case invalidInput(String)
-    
+    case incorrectPassword
+    case corruptedEncryptedArchive(String)
+
     var errorDescription: String? {
         switch self {
         case .unsupportedFormat(let message):
@@ -16,6 +18,10 @@ enum CompressionError: LocalizedError {
             return "Decompression failed: \(message)"
         case .invalidInput(let message):
             return "Invalid input: \(message)"
+        case .incorrectPassword:
+            return "Incorrect password"
+        case .corruptedEncryptedArchive(let message):
+            return "Encrypted archive is corrupted or was tampered with: \(message)"
         }
     }
 }

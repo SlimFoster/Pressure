@@ -1,4 +1,5 @@
 import XCTest
+import Security
 @testable import Pressure
 
 @MainActor
@@ -258,7 +259,7 @@ final class CompressionManagerTests: XCTestCase {
         let nonExistentFile = tempDirectory.appendingPathComponent("nonexistent.zip")
         let extractDir = tempDirectory.appendingPathComponent("extracted")
         try FileManager.default.createDirectory(at: extractDir, withIntermediateDirectories: true)
-        
+
         do {
             _ = try await compressionManager.decompress(
                 file: nonExistentFile,
@@ -269,5 +270,58 @@ final class CompressionManagerTests: XCTestCase {
         } catch {
             XCTAssertNotNil(error)
         }
+    }
+
+    // MARK: - compressSplit / rejoinSplit
+
+    func testCompressSplit_ZIP_ProducesSpanningVolumesAndRejoinsCorrectly() async throws {
+        let sourceDir = tempDirectory.appendingPathComponent("source")
+        try FileManager.default.createDirectory(at: sourceDir, withIntermediateDirectories: true)
+        let fileURL = sourceDir.appendingPathComponent("data.bin")
+        var bytes = [UInt8](repeating: 0, count: 200_000)
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        try Data(bytes).write(to: fileURL)
+
+        let outputBaseURL = tempDirectory.appendingPathComponent("archive.zip")
+        let volumes = try await compressionManager.compressSplit(
+            fileMappings: [(url: fileURL, archivePath: "data.bin")],
+            to: outputBaseURL,
+            format: .zip,
+            splitSizeBytes: 65536,
+            progress: { _ in }
+        )
+        XCTAssertGreaterThan(volumes.count, 1)
+        XCTAssertEqual(volumes.last?.pathExtension, "zip")
+
+        let rejoinedURL = tempDirectory.appendingPathComponent("rejoined.zip")
+        try compressionManager.rejoinSplit(startingFrom: volumes.first!, to: rejoinedURL)
+
+        let entries = try await ZIPCompressor.listEntries(at: rejoinedURL)
+        XCTAssertEqual(entries.map(\.path), ["data.bin"])
+    }
+
+    func testCompressSplit_TAR_UsesGenericChunkingAndRejoinsCorrectly() async throws {
+        let sourceDir = tempDirectory.appendingPathComponent("source")
+        try FileManager.default.createDirectory(at: sourceDir, withIntermediateDirectories: true)
+        let files = try CompressionTestHelpers.createTestFiles(in: sourceDir, count: 3)
+
+        let outputBaseURL = tempDirectory.appendingPathComponent("archive.tar")
+        let parts = try await compressionManager.compressSplit(
+            fileMappings: files.map { (url: $0, archivePath: $0.lastPathComponent) },
+            to: outputBaseURL,
+            format: .tar,
+            splitSizeBytes: 1024,
+            progress: { _ in }
+        )
+        XCTAssertGreaterThan(parts.count, 1)
+        XCTAssertTrue(GenericSplitCompressor.isSplitPart(parts.first!))
+
+        let rejoinedURL = tempDirectory.appendingPathComponent("rejoined.tar")
+        try compressionManager.rejoinSplit(startingFrom: parts.first!, to: rejoinedURL)
+
+        let extractDir = tempDirectory.appendingPathComponent("extracted")
+        try FileManager.default.createDirectory(at: extractDir, withIntermediateDirectories: true)
+        let extracted = try await compressionManager.decompress(file: rejoinedURL, to: extractDir, progress: { _ in })
+        XCTAssertEqual(extracted.count, 3)
     }
 }

@@ -1,28 +1,31 @@
 # Pressure - macOS Compression App
 
-A modern macOS application for compressing and decompressing files in multiple formats.
+A modern macOS application for compressing and decompressing files in multiple formats, with a Simple mode for quick one-off compression and a Power mode for full archive editing.
 
 ## Supported Formats
 
-- **ZIP** - Standard zip archives
+- **ZIP** - Standard zip archives, with real AES-256 password encryption (WinZip AE-2) and real disk-spanning splits
 - **GZIP** - GNU zip compression
 - **TAR** - Tape archive format
 - **BZIP2** - Block-sorting file compressor
 - **Z** - Unix compress format (uses LZ4 via Apple's Compression framework, not classic LZW)
 - **RAR** - RAR archive format (not yet implemented — throws `unsupportedFormat`; would require an external library such as libunrar)
 
+TAR, GZIP, BZIP2, and Z also support splitting into numbered volumes via generic byte-chunking (universally `cat`-joinable), rather than a format-native spanning scheme.
+
 ## Features
 
-- Modern SwiftUI interface with a Finder-style two-pane layout
-- Support for multiple compression formats
-- Batch file compression
+- **Simple mode** - a single drop zone for quick, one-off compression: drop files (or pick via a link), choose a format, save
+- **Power mode** - a full archive-editing session: open or create an archive, then browse it via a Finder-style sidebar/table, add/delete/rename files, and Extract All — changes save immediately, no separate "export" step
+- Real AES-256 password encryption for ZIP archives, compatible with Finder, 7-Zip, and other standard tools
+- Real splitting into numbered volumes for every supported format
 - Progress tracking
 - Drag and drop file selection
 - Decompression support for all implemented formats
 
 ## Requirements
 
-- macOS 13.0 or later
+- macOS 14.0 or later
 - Xcode 14.0 or later
 - Swift 5.9 or later
 - [Tuist](https://tuist.io) - For project generation and dependency management
@@ -31,8 +34,10 @@ A modern macOS application for compressing and decompressing files in multiple f
 
 The project uses the following Swift libraries (managed via Tuist):
 
-- **ZIPFoundation** - ZIP archive creation and extraction
+- **ZIPFoundation** - ZIP archive creation and extraction (used when the archive isn't encrypted or split)
 - **SWCompression** - GZIP, TAR (reading only), and BZIP2 compression/decompression
+
+ZIP encryption and splitting are hand-rolled (see `Sources/Pressure/Compression/Compressors/ZIP/`) rather than pulled from a library, since neither of the above supports them. Encryption uses CommonCrypto (ships with the SDK) — no extra dependency needed.
 
 Dependencies are automatically resolved when you run `tuist generate`.
 
@@ -40,7 +45,7 @@ Dependencies are automatically resolved when you run `tuist generate`.
 
 ### Prerequisites
 
-- macOS 13.0 or later
+- macOS 14.0 or later
 - Xcode 14.0 or later
 - Swift 5.9 or later
 - [Tuist](https://tuist.io) (install via `mise` or Homebrew: `brew install tuist`)
@@ -70,10 +75,9 @@ The project uses [Tuist](https://tuist.io) for project generation:
 
 ## Usage
 
-1. Launch the app
-2. Browse files in the left pane and drag them into the archive pane on the right
-3. Click Save (or Save As) to open the Save dialog, choose a format and compression level, and write the archive
-4. To decompress, open an existing archive and browse or extract its contents
+**Simple mode**: drop files onto the window (or use "or choose files..."), pick a format, and save — straight to a save panel, no extra steps.
+
+**Power mode**: open an existing archive or start a new one (drop files onto the empty state, or "New Archive…"). Browse its folder structure via the left sidebar, view/sort contents in the table, and use the toolbar to Extract All, Add Files, Delete, or Rename — every change writes to disk immediately. The right-hand inspector shows archive stats and lets you change Format/Compression, turn on password encryption, or split into volumes; both apply immediately.
 
 ## Project Structure
 
@@ -92,36 +96,46 @@ Pressure/
 │       │       ├── GZIPCompressor.swift
 │       │       ├── TARCompressor.swift
 │       │       ├── BZIP2Compressor.swift
-│       │       └── ZCompressor.swift
+│       │       ├── ZCompressor.swift
+│       │       ├── GenericSplitCompressor.swift   # Byte-chunked splitting for TAR/GZIP/BZIP2/Z
+│       │       └── ZIP/                            # Hand-rolled AES-256 encryption + disk-spanning
 │       └── Views/
-│           ├── PressureApp.swift                 # App entry point (@main)
-│           ├── ContentView.swift                 # Two-pane layout
-│           ├── FileSystemNavigator.swift          # Left pane: file system browser
-│           ├── FinderStyleNavigator.swift        # Finder-style file system implementation
-│           ├── ArchiveNavigator.swift             # Right pane: archive browser (+ ArchiveModel)
-│           ├── FinderStyleArchiveNavigator.swift # Finder-style archive implementation
-│           ├── SaveDialog.swift                   # Format + compression level selection
-│           └── FileDialogHelper.swift             # Async wrappers for NSSavePanel/NSOpenPanel
+│           ├── PressureApp.swift        # App entry point (@main) + Settings scene
+│           ├── ContentView.swift        # Switches between Simple and Power mode
+│           ├── AppMode.swift            # Mode/appearance enums, @AppStorage-backed
+│           ├── HeaderBar.swift          # Mode toggle, appearance, settings button
+│           ├── SettingsView.swift
+│           ├── ArchiveModel.swift       # Live archive-editing session (@MainActor ObservableObject)
+│           ├── FileDialogHelper.swift   # Async wrappers for NSSavePanel/NSOpenPanel
+│           ├── Simple/
+│           │   └── SimpleModeView.swift # Drop zone + format picker + direct save
+│           └── Power/
+│               ├── PowerModeView.swift
+│               ├── PowerToolbar.swift
+│               ├── ArchiveSidebarView.swift
+│               ├── ArchiveContentsTable.swift
+│               ├── ArchiveInspectorPanel.swift
+│               └── PasswordPromptSheet.swift
 ├── Resources/
 │   ├── Info.plist              # App metadata
 │   └── Pressure.entitlements   # Release code-signing entitlements
 └── Tests/
-    ├── PressureTests/          # Unit tests (mirrors Sources/Pressure/Compression)
+    ├── PressureTests/          # Unit tests (mirrors Sources/Pressure/Compression, plus Views/)
     └── PressureUITests/        # UI tests
 ```
 
 ## Architecture
 
-- **PressureApp.swift** - Main app entry point
-- **ContentView.swift** - Two-pane SwiftUI layout (file system pane + archive pane)
+- **PressureApp.swift** - App entry point; also declares the Settings scene
+- **ContentView.swift** - Switches between `SimpleModeView` and `PowerModeView`
 - **CompressionManager** - `@MainActor` coordinator that delegates to a per-format compressor struct in `Compression/Compressors/`
+- **ArchiveModel** - `@MainActor` live-editing session for Power mode: tracks archive contents, handles lazy extraction, and commits Add/Delete/Rename to disk immediately
 - **FileDialogHelper.swift** - Async wrappers around AppKit's completion-handler-based `NSSavePanel`/`NSOpenPanel`
 
 ## Future Enhancements
 
 - RAR compression/decompression support (requires libunrar)
 - 7z format support
-- Password protection for ZIP files
 - Archive preview
 - Batch operations
 

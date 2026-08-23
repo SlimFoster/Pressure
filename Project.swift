@@ -13,7 +13,7 @@ let project = Project(
     settings: .settings(
         base: [
             "SWIFT_VERSION": "5.9",
-            "MACOSX_DEPLOYMENT_TARGET": "13.0",
+            "MACOSX_DEPLOYMENT_TARGET": "14.0",
         ],
         configurations: [
             .debug(name: "Debug"),
@@ -26,14 +26,14 @@ let project = Project(
             destinations: [.mac],
             product: .app,
             bundleId: "com.pressure.Pressure",
-            deploymentTargets: .macOS("13.0"),
+            deploymentTargets: .macOS("14.0"),
             infoPlist: .extendingDefault(
                 with: [
                     "CFBundleName": "Pressure",
                     "CFBundleDisplayName": "Pressure",
                     "CFBundleShortVersionString": "1.0",
                     "CFBundleVersion": "1",
-                    "LSMinimumSystemVersion": "13.0",
+                    "LSMinimumSystemVersion": "14.0",
                     "NSHumanReadableCopyright": "Copyright © 2024. All rights reserved.",
                     "NSPrincipalClass": "NSApplication",
                     "NSHighResolutionCapable": true,
@@ -75,7 +75,7 @@ let project = Project(
             destinations: [.mac],
             product: .unitTests,
             bundleId: "com.pressure.PressureTests",
-            deploymentTargets: .macOS("13.0"),
+            deploymentTargets: .macOS("14.0"),
             infoPlist: .default,
             sources: [
                 .glob("Tests/PressureTests/**/*.swift"),
@@ -97,7 +97,7 @@ let project = Project(
             destinations: [.mac],
             product: .uiTests,
             bundleId: "com.pressure.PressureUITests",
-            deploymentTargets: .macOS("13.0"),
+            deploymentTargets: .macOS("14.0"),
             infoPlist: .default,
             sources: [
                 .glob("Tests/PressureUITests/**/*.swift"),

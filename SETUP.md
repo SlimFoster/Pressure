@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- macOS 13.0 or later
+- macOS 14.0 or later
 - Xcode 14.0 or later
 - Swift 5.9 or later
 - [Tuist](https://tuist.io) - Install via `mise` or Homebrew:
@@ -56,8 +56,10 @@ Pressure/
 ├── Workspace.swift              # Tuist workspace configuration
 ├── Sources/
 │   └── Pressure/
-│       ├── Compression/        # CompressionManager, format enum/errors, per-format compressors
-│       └── Views/               # PressureApp, ContentView, navigators, SaveDialog, FileDialogHelper
+│       ├── Compression/        # CompressionManager, format enum/errors, per-format compressors,
+│       │                       # plus ZIP/ (AES-256 encryption, disk-spanning) and generic splitting
+│       └── Views/               # PressureApp, ContentView, ArchiveModel, FileDialogHelper,
+│                                 # Simple/ (Simple mode) and Power/ (archive-editing mode)
 ├── Resources/
 │   ├── Info.plist              # App metadata
 │   └── Pressure.entitlements   # Release code-signing entitlements
@@ -78,6 +80,5 @@ Pressure/
 ## Next Steps
 
 - Customize the app icon and bundle identifier
-- Implement password protection for ZIP files
 - Add support for RAR compression (requires libunrar)
 - Add 7z format support

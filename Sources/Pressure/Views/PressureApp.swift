@@ -8,5 +8,9 @@ struct PressureApp: App {
         }
         .windowStyle(.automatic)
         .defaultSize(width: 800, height: 600)
+
+        Settings {
+            SettingsView()
+        }
     }
 }
